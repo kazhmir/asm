@@ -9,44 +9,42 @@ STDOUT = 1
 
 segment readable
 
+docs db 'usage: calc <expression>', 0xA, 'only works with integers', 0xA
+docs_len = $-docs
+
 newline db 0xA
 newline_size = $-newline
 
 segment readable writeable
+
 itoa_buff rb 10
 itoa_buff_end = $-1
 
 segment readable executable
 
+;---------------START OF EXECUTION-----------------
 ; r15 is a counter
 entry $
-	mov	r15, 10		; var counter <- 10;
-	
-loop_start: 			; for i < 10 => {
-	push	r15			; (buff:string, rax:int) <- itoa(64)
-	call	itoa
-	pop	r15
+	pop	r14	; argc
+	cmp 	r14, 2	; we expect <&filename> <&arg1>
+	jne	print_docs
 
-	mov	rdi, STDOUT		; print(buff)
-	mov	rax, SYS_WRITE
-	syscall
+	pop	r14	; discard &filename
+	pop	r14	; &arg1
 	
-	mov	rdx, newline_size	; print("\n")
-	lea	rsi, [newline]
+	jmp _end
+
+print_docs:
+	mov	rdx, docs_len	; print(docs)
+	lea	rsi, [docs]
 	mov	rdi, STDOUT
 	mov	rax, SYS_WRITE
 	syscall
-	
-	dec 	r15			; counter <- counter -1;
-	cmp 	r15, 0
-	jle	loop_end
-	jmp 	loop_start	
-loop_end:			;}
-
 _end:
 	xor	rdi, rdi 	; exit(0)
 	mov	rax, SYS_EXIT
 	syscall
+;---------------END OF EXECUTION-----------------
 
 ; itoa takes one argument:
 ;	a 64 bit integer
@@ -89,6 +87,29 @@ itoa_loop:
 	mov 	rsi, r8		; r8 is the start of the string
 				
 itoa_ret:
+	mov 	rsp, rbp
+	pop 	rbp
+	ret
+
+
+; atoi takes two arguments:
+;	start address of a string
+;	size of the string
+; and returns one result in rax:
+;	the integer
+; registers:
+;	r15 -> size
+; 	r14 -> &string
+atoi:
+	push 	rbp
+	mov	rbp, rsp
+	
+	mov 	r15, [rbp+16] 	; size
+	mov	r14, [rbp+24]	; &string
+
+	; unimplemented
+
+ret_atoi:
 	mov 	rsp, rbp
 	pop 	rbp
 	ret
