@@ -1,0 +1,6 @@
+#!/bin/bash
+
+fasm $1 out
+./out $2
+echo 'exited with' $?
+rm -f out

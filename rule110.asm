@@ -29,14 +29,10 @@ title db 'Rule 110',0xA
 title_size = $-title
 
 newline db 0xA
-space	db 0x20
 
 segment readable writeable
 
-itoa_buff rb 20
-itoa_buff_end = $-1
-
-line_A rb line_size
+line_A rb line_size	; double buffer
 line_B rb line_size
 
 segment readable executable

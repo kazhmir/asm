@@ -13,7 +13,7 @@ docs db 'usage: calc <expression>', 0xA, 'only works with integers', 0xA
 docs_len = $-docs
 
 newline db 0xA
-newline_size = $-newline
+newline_len = $-newline
 
 segment readable writeable
 
@@ -23,15 +23,14 @@ itoa_buff_end = $-1
 segment readable executable
 
 ;---------------START OF EXECUTION-----------------
-; r15 is a counter
 entry $
 	pop	r14	; argc
 	cmp 	r14, 2	; we expect <&filename> <&arg1>
 	jne	print_docs
 
 	pop	r14	; discard &filename
-	pop	r14	; &arg1
-	
+	call	len_str	; &arg1
+
 	jmp _end
 
 print_docs:
@@ -45,6 +44,7 @@ _end:
 	mov	rax, SYS_EXIT
 	syscall
 ;---------------END OF EXECUTION-----------------
+
 
 ; itoa takes one argument:
 ;	a 64 bit integer
@@ -96,20 +96,74 @@ itoa_ret:
 ;	start address of a string
 ;	size of the string
 ; and returns one result in rax:
-;	the integer
+;	the integer (rax)
 ; registers:
 ;	r15 -> size
 ; 	r14 -> &string
+;	rax -> result
+;	bl  -> current char
 atoi:
 	push 	rbp
 	mov	rbp, rsp
 	
 	mov 	r15, [rbp+16] 	; size
 	mov	r14, [rbp+24]	; &string
+	mov	r13, 1		; signal (positive)
 
-	; unimplemented
+	xor	rax, rax
+	xor	rbx, rbx	; we will be working with the bl part
+				; but using the entire register to add
+				
+	cmp	byte [r14], '+'
+	je	atoi_plus
+	cmp	byte [r14], '-'
+	je	atoi_minus
+	jmp	atoi_loop
+atoi_minus:
+	mov	r13, -1
+atoi_plus:
+	inc	r14
+	dec	r15
 
-ret_atoi:
+atoi_loop:
+	mov	bl, [r14]	; take a char
+	sub	bl, '0'		; convert to number
+	imul	rax, 10
+	add	rax, rbx
+
+	inc	r14
+	dec	r15
+	cmp 	r15, 1
+	jge 	atoi_loop
+
+	imul	rax, r13
+
+atoi_ret:
+	mov 	rsp, rbp
+	pop 	rbp
+	ret
+
+
+; takes one argument
+;	pointer to null terminated string
+; returns one argument
+;	rax -> the size of the string
+len_str:
+	push 	rbp
+	mov	rbp, rsp
+	mov 	r15, [rbp+16] 	; &string
+	
+	xor	rax, rax
+	xor	rbx, rbx
+len_str_loop:
+	mov	bl, [r15]
+	cmp	bl, 0
+	je	len_str_ret	; we don't count the \0
+	inc	r15
+	inc	rax
+	jmp	len_str_loop
+
+len_str_ret:
 	mov 	rsp, rbp
 	pop 	rbp
 	ret
