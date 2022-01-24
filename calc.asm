@@ -9,11 +9,19 @@ STDOUT = 1
 
 segment readable
 
-docs db 'usage: calc <expression>', 0xA, 'only works with integers', 0xA
+docs db 'usage: calc <expression>',0xA,\
+	'only works with integers',0xA,\
+	'grammar:',0xA,\
+	0x9,'Expr = Term {("-" | "+") Term}.',            0xA,\
+	0x9,'Term = ("+" | "-") integer | "(" Expr ")".', 0xA,\
+	0x9,'integer = digit {digit}.',                   0xA
 docs_len = $-docs
 
 newline db 0xA
 newline_len = $-newline
+
+digits db '0123456789'
+digits_len = $-digits
 
 segment readable writeable
 
@@ -29,9 +37,30 @@ entry $
 	jne	print_docs
 
 	pop	r14	; discard &filename
-	call	len_str	; &arg1
+	call	len_str
+	push 	rax	; (&arg1, len(@arg1))
+main_loop:
+	call	next
+	cmp	rbx, -1
+	je	main_end	; if EOF then exit(0)
+	
+	pop	r15	; len(@arg1)
+	sub	r15, rbx; new length
+	
+	pop	r14	; &arg1
+	mov	r14, rax; new &arg1
 
-	jmp _end
+	push	r14
+	push	r15	; (&arg1, len(@arg1))
+
+	mov	rdx, rbx
+	mov	rsi, rax
+	mov	rdi, STDOUT
+	mov	rax, SYS_WRITE
+	syscall
+	jmp	main_loop
+	
+	jmp main_end
 
 print_docs:
 	mov	rdx, docs_len	; print(docs)
@@ -39,15 +68,118 @@ print_docs:
 	mov	rdi, STDOUT
 	mov	rax, SYS_WRITE
 	syscall
-_end:
+main_end:
 	xor	rdi, rdi 	; exit(0)
 	mov	rax, SYS_EXIT
 	syscall
 ;---------------END OF EXECUTION-----------------
 
+; eval takes two arguments
+; 	&string
+; 	the remaining lenght of the string
+; and returns one result
+;	a 64bit signed integer
+eval:
+	push 	rbp
+	mov	rbp, rsp
+	call term
+eval_ret:
+	mov 	rsp, rbp
+	pop 	rbp
+	ret
+
+; term takes two arguments
+; 	&string
+; 	the remaining lenght of the string
+; and returns one result
+;	a 64bit signed integer
+term:
+	push 	rbp
+	mov	rbp, rsp
+term_ret:
+	mov 	rsp, rbp
+	pop 	rbp
+	ret
+
+; integer takes two arguments
+; 	&string
+; 	the remaining lenght of the string
+; and returns one result
+;	a 64bit signed integer
+integer:
+	push 	rbp
+	mov	rbp, rsp
+integer_ret:
+	mov 	rsp, rbp
+	pop 	rbp
+	ret
+
+; next takes two arguments
+; 	pointer into string
+;	size of string
+; returns
+;	rax -> pointer to start of token
+;	rbx -> size of token
+next:
+	push 	rbp
+	mov	rbp, rsp
+	mov 	r15, [rbp+16] 		; size
+	mov 	r14, [rbp+24] 		; &string
+
+next_loop:			; for r15 >= 0 {
+	xor 	rbx, rbx
+	mov	bl, [r14]
+	cmp	bl, '+'
+	je	next_OP		; 	case bl {
+	cmp	bl, '-'		;		'+', '-', '(', ')' then return new {size => 1, start => r14};
+	je	next_OP		;	}
+	cmp	bl, '('		
+	je	next_OP
+	cmp	bl, ')'
+	je 	next_OP
+	cmp	bl, '0'
+	jl	next_continue	;	case bl >= '0' and bl <= '9' then goto next_number;
+	cmp	bl, '9'
+	jg	next_continue
+	jmp	next_number
+
+next_continue:
+	dec	r15
+	cmp	r15, 0
+	jge	next_loop	; }
+
+	mov	rbx, -1		; end of string
+	jmp	next_ret
+	
+next_number:
+	mov	rax, r14	; save the start of the token
+	mov	r13, 1		; current size of token
+	inc	r14
+next_number_loop:
+	mov	bl, [r14]
+	cmp	bl, '0'
+	jl	next_number_ret
+	cmp 	bl, '9'
+	jg	next_number_ret
+	
+	inc	r14
+	inc	r13
+	jmp	next_number_loop
+next_number_ret:
+	mov	rbx, r13
+	jmp 	next_ret
+	
+next_OP:
+	mov	rbx, 1
+	mov	rax, r14
+	
+next_ret:
+	mov 	rsp, rbp
+	pop 	rbp
+	ret
 
 ; itoa takes one argument:
-;	a 64 bit integer
+;	a 64 bit signed integer
 ; and returns two results:
 ;	rdx -> the size of the string
 ; 	rsi -> address of string
@@ -96,7 +228,7 @@ itoa_ret:
 ;	start address of a string
 ;	size of the string
 ; and returns one result in rax:
-;	the integer (rax)
+;	a 64bit signed integer (rax)
 ; registers:
 ;	r15 -> size
 ; 	r14 -> &string

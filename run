@@ -1,6 +1,7 @@
 #!/bin/bash
 
 fasm $1 out
+echo '------------ start'
 ./out $2
-echo 'exited with' $?
+echo '------------ exit' $?
 rm -f out
