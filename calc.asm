@@ -23,6 +23,9 @@ newline_len = $-newline
 digits db '0123456789'
 digits_len = $-digits
 
+sep     db ', '
+sep_len = $-sep
+
 segment readable writeable
 
 itoa_buff rb 10
@@ -38,26 +41,34 @@ entry $
 
 	pop	r14	; discard &filename
 	call	len_str
-	push 	rax	; (&arg1, len(@arg1))
+	pop 	r14
+	mov	r15, rax
 main_loop:
-	call	next
-	cmp	rbx, -1
-	je	main_end	; if EOF then exit(0)
-	
-	pop	r15	; len(@arg1)
-	sub	r15, rbx; new length
-	
-	pop	r14	; &arg1
-	mov	r14, rax; new &arg1
-
 	push	r14
 	push	r15	; (&arg1, len(@arg1))
+	call	next
+	cmp	rbx, 0
+	jl	main_end	; if EOF then exit(0)
+	
+	pop	r15		; len(@arg1)
+	sub	r15, rbx	; new length
+	
+	pop	r14		; &arg1
+	mov	r14, rax
+	add	r14, rbx	; new &arg1
 
 	mov	rdx, rbx
 	mov	rsi, rax
 	mov	rdi, STDOUT
 	mov	rax, SYS_WRITE
 	syscall
+	
+	mov	rdx, sep_len
+	mov	rsi, sep
+	mov	rdi, STDOUT
+	mov	rax, SYS_WRITE
+	syscall
+
 	jmp	main_loop
 	
 	jmp main_end
@@ -82,7 +93,7 @@ main_end:
 eval:
 	push 	rbp
 	mov	rbp, rsp
-	call term
+	call	term
 eval_ret:
 	mov 	rsp, rbp
 	pop 	rbp
@@ -120,11 +131,19 @@ integer_ret:
 ; returns
 ;	rax -> pointer to start of token
 ;	rbx -> size of token
+;
+; this represents the LEXER
+; r14 -> pointer inside the string
+; r15
+; rbx
 next:
 	push 	rbp
 	mov	rbp, rsp
 	mov 	r15, [rbp+16] 		; size
 	mov 	r14, [rbp+24] 		; &string
+
+	cmp	r15, 0
+	jle	next_eof
 
 next_loop:			; for r15 >= 0 {
 	xor 	rbx, rbx
@@ -145,9 +164,10 @@ next_loop:			; for r15 >= 0 {
 
 next_continue:
 	dec	r15
+	inc	r14
 	cmp	r15, 0
-	jge	next_loop	; }
-
+	jg	next_loop	; }
+next_eof:
 	mov	rbx, -1		; end of string
 	jmp	next_ret
 	

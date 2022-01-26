@@ -1,7 +1,0 @@
-#!/bin/bash
-
-fasm $1 out
-echo '------------ start'
-./out $2
-echo '------------ exit' $?
-rm -f out
