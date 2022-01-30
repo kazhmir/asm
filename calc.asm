@@ -42,6 +42,9 @@ error_paren_len = $-error_paren
 error_sym	db 'Unexpected Symbol near '
 error_sym_len = $-error_sym
 
+fatal_div	db 'Fatal Division by zero', 0xA
+fatal_div_len = $-fatal_div
+
 segment readable writeable
 
 itoa_buff rb 10
@@ -172,6 +175,8 @@ mult_div:
 	mov	rbx, rax
 	pop	rax
 	xor	rdx, rdx
+	cmp	rbx, 0
+	je	mult_div_zero
 	div	rbx
 	push	rax
 	jmp	mult_loop
@@ -182,7 +187,17 @@ mult_mult:
 	imul	rbx, rax
 	push	rbx
 	jmp	mult_loop
-	
+
+
+mult_div_zero:
+	mov	rdx, fatal_div_len	; print(docs)
+	lea	rsi, [fatal_div]
+	mov	rdi, STDOUT
+	mov	rax, SYS_WRITE
+	syscall
+	mov	rdi, 1	 	; exit(1)
+	mov	rax, SYS_EXIT
+	syscall
 mult_expect_op:
 	push	error_op
 	push	error_op_len
