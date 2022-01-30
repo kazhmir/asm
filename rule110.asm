@@ -13,7 +13,7 @@ max_gen   = 100		; computes at most this number of generations
 alive     = 'O'		; char used to represent alive cells
 dead      = ' '		; char used to represent dead cells
 
-; rules
+; rules, change this to encode different automatons
 out_000 = dead
 out_001 = alive
 out_010 = alive

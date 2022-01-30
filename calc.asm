@@ -50,11 +50,11 @@ segment readable writeable
 itoa_buff rb 10
 itoa_buff_end = $-1
 
-buff_initial_len rq 1
-buff_start rq 1
-buff_len rq 1
+buff_initial_len rq 1	; for pretty printing errors
+buff_start rq 1		; points to the current position in the string
+buff_len rq 1		; remaining lenght of string
 
-last_tk_len rq 1
+last_tk_len rq 1	; for unreadind
 
 segment readable executable
 
@@ -68,6 +68,7 @@ entry $
 	call	len_str
 	pop 	r14
 
+	; initialize globals
 	mov 	qword [buff_len], rax
 	mov 	qword [buff_initial_len], rax
 	mov 	qword [buff_start], r14
@@ -101,6 +102,10 @@ main_end:
 ; eval takes no arguments
 ; and returns one result
 ;	rax -> 64bit signed integer
+;
+; its the start of the recursive descent
+; equivalent to:
+;	Expr = Mult {("-" | "+") Mult}.
 eval:
 	push 	rbp
 	mov	rbp, rsp
@@ -151,6 +156,10 @@ eval_ret:
 ; mult takes no arguments
 ; and returns one result
 ;	rax -> 64bit signed integer
+;
+; Implements a second level of precedence for * and /
+; Equivalent to:
+;	Mult = Term {("-" | "+") Term}.
 mult:
 	push 	rbp
 	mov	rbp, rsp
@@ -170,6 +179,7 @@ mult_loop:
 
 	call	unread
 	jmp	mult_ret
+	
 mult_div:
 	call	term
 	mov	rbx, rax
@@ -187,8 +197,7 @@ mult_mult:
 	imul	rbx, rax
 	push	rbx
 	jmp	mult_loop
-
-
+	
 mult_div_zero:
 	mov	rdx, fatal_div_len	; print(docs)
 	lea	rsi, [fatal_div]
@@ -212,6 +221,10 @@ mult_ret:
 ; term takes no arguments
 ; and returns one result
 ;	rax -> 64bit signed integer
+;
+; Here's where the parser calls atoi
+; Equivalent to:
+;	Term = ("+" | "-") (integer | "(" Expr ")").
 term:
 	push 	rbp
 	mov	rbp, rsp
@@ -346,16 +359,16 @@ error_end:
 	syscall
 
 ; next takes no arguments
-; 	pointer into string
-;	size of string
 ; returns
 ;	rax -> pointer to start of token
 ;	rbx -> size of token
+; Registers
+; 	r14 -> pointer inside the string
+; 	r15 -> remaining size
+; 	rbx -> holds current char
 ;
-; this represents the LEXER
-; r14 -> pointer inside the string
-; r15 -> remaining size
-; rbx
+; this represents the LEXER, it depends on global variables
+; to represent the state of the lexer
 next:
 	push 	rbp
 	mov	rbp, rsp
@@ -370,7 +383,7 @@ next_loop:			; for r15 >= 0 {
 	mov	bl, [r14]
 	cmp	bl, '+'
 	je	next_OP		; 	case bl {
-	cmp	bl, '-'		;		'+', '-', '(', ')' then return new {size => 1, start => r14};
+	cmp	bl, '-'		;		'+', '-', '(', ')', '*', '/' then return new {size => 1, start => r14};
 	je	next_OP		;	}
 	cmp	bl, '('		
 	je	next_OP
@@ -397,7 +410,7 @@ next_eof:
 	
 next_number:
 	mov	rax, r14	; save the start of the token
-	mov	r13, 1		; current size of token
+	mov	r13, 1		; r13 -> current size of token
 	inc	r14
 	dec	r15
 next_number_loop:
@@ -424,6 +437,7 @@ next_OP:
 	dec	r15
 	
 next_ret:
+	; update globals
 	mov 	qword [buff_len], r15
 	mov 	qword [buff_start], r14
 	mov	qword [last_tk_len], rbx
@@ -506,7 +520,7 @@ itoa_ret:
 ;	a 64bit signed integer (rax)
 ; registers:
 ;	r15 -> size
-; 	r14 -> &string
+; 	r14 -> pointer into string
 ;	rax -> result
 ;	bl  -> current char
 atoi:
@@ -514,7 +528,7 @@ atoi:
 	mov	rbp, rsp
 	
 	mov 	r15, [rbp+16] 	; size
-	mov	r14, [rbp+24]	; &string
+	mov	r14, [rbp+24]	; pointer into string
 	mov	r13, 1		; signal (positive)
 
 	xor	rax, rax
@@ -558,7 +572,7 @@ atoi_ret:
 len_str:
 	push 	rbp
 	mov	rbp, rsp
-	mov 	r15, [rbp+16] 	; &string
+	mov 	r15, [rbp+16] 	; pointer into string
 	
 	xor	rax, rax
 	xor	rbx, rbx
